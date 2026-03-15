@@ -15,45 +15,53 @@ fields.
 
 const { MongoClient, ObjectId } = require("mongodb");
 
-const uri = process.env.MONGO_URI;
+const uri = "mongodb+srv://whager_db_user:N1tGbZrnsvKYgvrn@rating-interface-websit.zxw2ga4.mongodb.net/?appName=Rating-Interface-Website";
 const client = new MongoClient(uri);
-const db = () => client.db("Rating-Interface-Website").collection("post-survey")
+const collection = () => client.db("rating-interface").collection("post-survey")
 
-export async function GET() {
-    try {
+let isConnected = false;
+
+const connectClient = async () => {
+    if (!isConnected) {
         await client.connect();
-        const items = await db().find({}).toArray();
-        return Response.json(items)
-
+        isConnected = true;
     }
-    catch (error) {
-        console.error(error)
-        return Response.json({error: "Failed to GET post-survey", status: 500})
-    }
-}
+};
 
-export async function POST(req) {
+const sendJson = (statusCode, body) => ({
+    statusCode,
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+});
+
+exports.handler = async (event) => {
+    const method = event.httpMethod;
     try {
-        const body = await req.json();
-        await client.connect();
-        const result = await db().insertOne(body);
-        return Response.json(result, {status: 201});
-    }
-    catch (error) {
-        console.error(error);
-        return Response.json({error: "Failed to POST post-survey", status: 500})
+        await connectClient();
 
-    }
-}
+        if(method === "GET") {
+            const items = await collection().find({}).toArray();
+            return sendJson(200, items);
+        }
+        
+        if(method === "POST"){
+            const body = event.body ? JSON.parse(event.body) : {};
+            const result = await collection().insertOne(body)
+            return sendJson(201, result);
+        }
 
-export async function DELETE(_, { params }) {
-    try {
-        await client.connect()
-        await db().deleteOne({ _id: new ObjectId(params.id) })
-        return Response.json({success: true})
+        if(method === "DELETE"){
+            const id = event.queryStringParameters?.id;
+            if(!id) return sendJson(400, {error: "Missing ID query parametery"});
+            await collection().deleteOne({_id : new ObjectId(id)});
+            return sendJson(200, {success : true});
+        }
+
+        return sendJson(405, {error: `Method ${Method} not allowed.`})
     }
-    catch(error) {
+
+    catch (error){
         console.error(error);
-        return Response.json({error: "Failed to DELETE post-survey", status: 500})
+        return sendJson(500, {error: `Failed to ${method} post-survey`});
     }
 }
