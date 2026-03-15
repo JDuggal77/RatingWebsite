@@ -97,3 +97,38 @@ const LABEL = {
   color: "#374151",
   marginBottom: "8px",
 };
+
+const SELECT = {
+  width: "100%",
+  padding: "14px 18px",
+  fontSize: "15px",
+  color: "#374151",
+  background: "#fff",
+  border: "1.5px solid #d1d5db",
+  borderRadius: "10px",
+  appearance: "none",          
+  WebkitAppearance: "none",     
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 16px center",
+  cursor: "pointer",
+  outline: "none",
+  transition: "border-color 0.2s",
+  boxSizing: "border-box",
+};
+
+function ChevronIcon() {
+    return(
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5"
+      strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function NextButton({ label = "Next", onClick }) {
+    const[hovered, setHovered] = useState(false);
+    return (
+    <button
+        onClick = {onClick}
+        
