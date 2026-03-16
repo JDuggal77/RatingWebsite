@@ -154,5 +154,13 @@ function PageHead ({ title, subtitle, current, total }) {
                 {title}
             </h1>
              <p style={{ fontSize: "15px", color: "#6b7280", margin: "0 0 6px" }}>{subtitle}</p>
-
+            {current !== undefined && (
+                <p style={{ fontSize: "14px", color: "#9ca3af", margin: 0 }}>
+                      Question {current + 1} of {total}
+                </p>
+              )}
+            </div>
+  );
+}
+ 
         
