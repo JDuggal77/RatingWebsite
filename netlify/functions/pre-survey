@@ -5,7 +5,7 @@ This is a RESTful endpoint for logging demographic info of the user.
 It supports GET, POST, and DELETE.
 
 The POST should be a JSON object containing fields:
-USER_ID: int
+USER_ID : String 
 age_range: String
 gender: String
 highest_education_level: String, 
@@ -19,7 +19,7 @@ const { MongoClient, ObjectId } = require("mongodb");
 
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
-const collection = () => client.db("rating-interface").collection("demographic-info")
+const collection = () => client.db("rating-interface").collection("pre-survey")
 
 let isConnected = false;
 
