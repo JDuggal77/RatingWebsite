@@ -5,17 +5,18 @@ This is a RESTful endpoint for logging demographic info of the user.
 It supports GET, POST, and DELETE.
 
 The POST should be a JSON object containing fields:
-USER_ID : String 
 age_range: String
 gender: String
-highest_education_level: String, 
+highest_education_level: String,
 state: String
+USER_ID: String
 
 The GET output is an array of JSON objects containing the aforementioned
 fields.
 ***************************************************************************/
 
 const { MongoClient, ObjectId } = require("mongodb");
+require('dotenv').config()
 
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
@@ -57,6 +58,17 @@ exports.handler = async (event) => {
             if(!id) return sendJson(400, {error: "Missing ID query parametery"});
             await collection().deleteOne({_id : new ObjectId(id)});
             return sendJson(200, {success : true});
+        }
+
+        if (method === "PATCH") {
+            const id = event.queryStringParameters?.id;
+            if (!id) return sendJson(400, { error: "Missing ID query parameter" });
+            const body = event.body ? JSON.parse(event.body) : {};
+            const result = await collection().updateOne(
+                { _id: new ObjectId(id) },
+                { $set: body }
+            );
+            return sendJson(200, result);
         }
 
         return sendJson(405, {error: `Method ${Method} not allowed.`})

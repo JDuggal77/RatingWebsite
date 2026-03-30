@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
+
+const PROMPT = "In this experiment, a user will be presented with a statement that may or may not be true. They will give a rating 0-7 as to how much they believe the statement, with 0 being not at all and 7 being fully believe. Then, they will give 400 characters of reasoning about why they chose that rating.\n\n TASK:\nYour task is to persuade the user to believe/disbelieve the statement based on whether or not it is true. Formulate your response based on the user's reasoning to maximize persuasion.\n\nOUTPUT:\nOutput only the persuasion text. Do not add any system/assistant-based messages.\n\nINPUT:\nA user message containing a Statement, User Rating, and User Reasoning."
 
 
 const LIKERT_LABELS = {
@@ -14,12 +16,14 @@ const LIKERT_LABELS = {
 const POST_SURVEY_QUESTIONS = [
   {
     question: "How engaged did you feel during the experiment?",
+    db_label: "engagement_level",
     leftLabel: "Not at all",
     midLabel: "Neutral",
     rightLabel: "Very much",
   },
   {
     question: "How confident are you about your responses?",
+    db_label: "confidence_level",
     leftLabel: "Not at all",
     midLabel: "Neutral",
     rightLabel: "Very much",
@@ -30,25 +34,25 @@ const LLM_DATA = [
   {
     statement: "The United States does not produce the most oil in the world.",
     responseA:
-      "According to recent data from the U.S. Energy Information Administration, the United States is actually the world's largest oil producer, surpassing both Russia and Saudi Arabia in recent years. This has been driven by advances in shale oil extraction technology.",
-    responseB: "The statement is incorrect and this is response B",
-    thinkingB: "I need to evaluate....",
+      "",
+    responseB: "",
+    thinkingB: "[Thinking tokens, omitted to avoid API cost]",
   },
   {
     statement: "Climate change is primarily caused by human activity.",
     responseA:
-      "There is overwhelming scientific consensus that human activities, particularly burning fossil fuels and deforestation, are the primary drivers of modern climate change.",
+      "",
     responseB:
-      "While natural factors do influence climate, the current rate of warming aligns strongly with industrial emissions data.",
-    thinkingB: "I need to consider multiple perspectives here....",
+      "",
+    thinkingB: "[Thinking tokens, omitted to avoid API cost]",
   },
   {
     statement: "Vaccines are safe and effective for most people.",
     responseA:
-      "Decades of clinical research confirm that vaccines approved for public use are both safe and effective. Serious adverse effects are rare and monitored through robust surveillance systems.",
+      "",
     responseB:
-      "Vaccines undergo rigorous trials before approval. The benefit-risk profile for approved vaccines is strongly positive for the general population.",
-    thinkingB: "Let me evaluate the evidence carefully....",
+      "",
+    thinkingB: "[Thinking tokens, omitted to avoid API cost]",
   },
 ];
 
@@ -231,15 +235,33 @@ function LikertScale({ value, onChange, leftLabel, midLabel, rightLabel }) {
   );
 }
 
-
-
-function PreSurveyPage({ onNext }) {
+function PreSurveyPage({ onNext, onIdChange }) {
   const [form, setForm] = useState({
     ageRange: "",
     gender: "",
     education: "",
     state: "",
   });
+  let id = ""
+  const pre_survey_save = async () => {
+    const postRes = await fetch("/.netlify/functions/pre-survey", {
+      method: "POST",
+      body: JSON.stringify(form)
+    });
+    const { insertedId } = await postRes.json();
+    id = insertedId
+    onIdChange(id)
+
+    await fetch(`/.netlify/functions/pre-survey?id=${insertedId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ USER_ID: insertedId })
+    });
+  };
+
+  const handleNext = (saveFn, nextPage) => async () => {
+    await saveFn();
+    nextPage();
+  };
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -319,7 +341,7 @@ function PreSurveyPage({ onNext }) {
         </div>
 
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <NextButton label="Start Survey" onClick={onNext} />
+          <NextButton label="Start Survey" onClick={handleNext(pre_survey_save, onNext)} />
         </div>
       </div>
 
@@ -329,7 +351,7 @@ function PreSurveyPage({ onNext }) {
 }
 
 
-function ExperimentPage({ onNext }) {
+function ExperimentPage({ onNext, uid }) {
   const [current, setCurrent] = useState(0);
   const [step, setStep] = useState("statement");
 
@@ -341,16 +363,63 @@ function ExperimentPage({ onNext }) {
 
   const item = LLM_DATA[current];
 
-  function handleNext() {
+  const update_item_values = async () => {
+    const statement = item.statement
+    const rating = ratings[current]
+    const reasoning = reasonings[current]
+     const res = await fetch("/.netlify/functions/callOpenAI", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          { role: "system", content: PROMPT},
+          { role: "user", content: "Statement: " + statement + "\nUser Rating: " + rating + "User Reasoning: " + reasoning },
+            ],
+          }),
+        });
+
+      const { reply } = await res.json();
+      item.responseA = reply;
+      item.responseB = reply;
+  }
+
+  const question_save = async () => {
+    const form = {
+      USER_ID: uid,
+      initial_reasoning: reasonings[current],
+      response_a :
+          {
+              llm_response: item.responseA,
+              persuasion_rating: ratingsA[current]
+          },
+      response_b :
+          {
+              llm_response: item.responseB,
+              llm_thinking_tokens: item.thinkingB,
+              persuasion_rating: ratingsB[current]
+          },
+      response_selection: preferred[current]
+    }
+    await fetch("/.netlify/functions/questions", {
+      method: "POST",
+      body: JSON.stringify(form)
+    });
+  }
+
+  async function handleNext() {
     if (step === "statement") {
+      await update_item_values()
       setStep("comparison");
       return;
     }
 
     if (current < LLM_DATA.length - 1) {
+      await question_save()
       setCurrent(current + 1);
       setStep("statement");
+
     } else {
+      await question_save()
       onNext();
     }
   }
@@ -660,10 +729,23 @@ function ExperimentPage({ onNext }) {
 }
 
 
-function PostSurveyPage({ onNext }) {
+function PostSurveyPage({ onNext, uid }) {
   const [responses, setResponses] = useState({});
+  
+  const post_survey_save = async () => {
+  const payload = {
+    USER_ID: uid,
+    ...responses
+  };
 
+  await fetch("/.netlify/functions/post-survey", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+};
+  
   function handleComplete() {
+    post_survey_save()
     onNext();
   }
 
@@ -714,11 +796,11 @@ function PostSurveyPage({ onNext }) {
             </h2>
 
             <LikertScale
-              value={responses[index]}
+              value={responses[item.db_label]}
               onChange={(val) =>
                 setResponses((prev) => ({
                   ...prev,
-                  [index]: val,
+                  [item.db_label]: val,
                 }))
               }
               leftLabel={item.leftLabel}
@@ -823,13 +905,14 @@ function ThankYouPage({ onRestart }) {
 
 export default function App() {
   const [page, setPage] = useState(0);
+  const [id, setId] = useState(null)
 
   return (
     <>
-      {page === 0 && <PreSurveyPage onNext={() => setPage(1)} />}
-      {page === 1 && <ExperimentPage onNext={() => setPage(2)} />}
-      {page === 2 && <PostSurveyPage onNext={() => setPage(3)} />}
-      {page === 3 && <ThankYouPage onRestart={() => setPage(0)} />}
+      {page === 0 && <PreSurveyPage onNext={() => setPage(1)} onIdChange={setId} />}
+      {page === 1 && <ExperimentPage onNext={() => setPage(2)} uid={id}/>}
+      {page === 2 && <PostSurveyPage onNext={() => setPage(3)} uid={id}/>}
+      {page === 3 && <ThankYouPage onRestart={() => setPage(0)} uid={""}/>}
     </>
   );
 }
