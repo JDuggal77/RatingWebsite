@@ -48,9 +48,9 @@ function pickStatements(pool, n) {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, n).map(s => ({
     statement: s,
-    responseA: "",
-    responseB: "",
-    thinkingB: "[Thinking tokens, omitted to avoid API cost]",
+    responseX: "",
+    responseY: "",
+    thinkingY: "[Thinking tokens, omitted to avoid API cost]",
   }));
 }
 
@@ -92,19 +92,6 @@ const CARD = {
   margin: "0 auto",
   boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
   boxSizing: "border-box",
-};
-
-const STOPSTART = {
-  background: "#6c63ff",
-  color: "#fff",
-  border: "none",
-  borderRadius: "6px",
-  padding: "12px 32px",
-  fontSize: "15px",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  gap: "6px",
 };
 
 const LABEL = {
@@ -155,9 +142,26 @@ function Arrow() {
   );
 }
 
-function NextButton({ label = "Next", onClick }) {
+function NextButton({ label = "Next", onClick, disabled }) {
   return (
-    <button onClick={onClick} style={STOPSTART}>
+    <button 
+      onClick={onClick} 
+      disabled={disabled}
+      style={{
+        background: "#6c63ff",
+        color: "#fff",
+        border: "none",
+        borderRadius: "6px",
+        padding: "12px 32px",
+        fontSize: "15px",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? "wait" : "pointer",
+        pointerEvents: disabled ? "none" : "auto"}}
+      >
       {label} <Arrow />
     </button>
   );
@@ -238,6 +242,8 @@ function LikertScale({ value, onChange, leftLabel, midLabel, rightLabel }) {
 }
 
 function PreSurveyPage({ onNext, onIdChange, onProlificIdChange }) {
+  const [loading, setLoading] = useState(false);
+
   const [form, setForm] = useState({
     PROLIFIC_ID: "",
     ageRange: "",
@@ -263,8 +269,14 @@ function PreSurveyPage({ onNext, onIdChange, onProlificIdChange }) {
   };
 
   const handleNext = (saveFn, nextPage) => async () => {
-    await saveFn();
+    setLoading(true)
+    try {
+      await saveFn();
     nextPage();
+    } 
+    finally {
+      setLoading(false);
+    }
   };
 
   function handlePIDChange(e) {
@@ -357,7 +369,11 @@ function PreSurveyPage({ onNext, onIdChange, onProlificIdChange }) {
   </select>
 </div>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <NextButton label="Start Survey" onClick={handleNext(pre_survey_save, onNext)} />
+          <NextButton
+            label={loading ? "Saving..." : "Start Survey"}
+            onClick={handleNext(pre_survey_save, onNext)}
+            disabled={loading}
+          />
         </div>
       </div>
 
@@ -368,81 +384,110 @@ function PreSurveyPage({ onNext, onIdChange, onProlificIdChange }) {
 
 
 function ExperimentPage({ onNext, uid, pid }) {
+  const [loading, setLoading] = useState(false)
+  
   const [current, setCurrent] = useState(0);
   const [step, setStep] = useState("statement");
-  const [order, setOrder] = useState(0)
+  const [order, setOrder] = useState(0);
 
   const [ratings, setRatings] = useState({});
   const [reasonings, setReasonings] = useState({});
   const [ratingsA, setRatingsA] = useState({});
   const [ratingsB, setRatingsB] = useState({});
   const [preferred, setPreferred] = useState({});
+  const [assignments, setAssignments] = useState({});
+
 
   const item = LLM_DATA[current];
 
+  const xSide = assignments[current];
+  const ySide = xSide === "A" ? "B" : "A";
+
+  const responseA = xSide === "A" ? item.responseX : item.responseY;
+  const responseB = xSide === "A" ? item.responseY : item.responseX;
+  const thinkingA = xSide === "B" ? item.thinkingY : undefined;
+  const thinkingB = xSide === "A" ? item.thinkingY : undefined;
 
   const update_item_values = async () => {
-    const statement = item.statement
-    const rating = ratings[current]
-    const reasoning = reasonings[current]
-     const res = await fetch("/.netlify/functions/callOpenAI", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [
-          { role: "system", content: PROMPT},
-          { role: "user", content: "Statement: " + statement + "\nUser Rating: " + rating + "User Reasoning: " + reasoning },
-            ],
-          }),
-        });
+    const body = JSON.stringify({
+      messages: [
+        { role: "system", content: PROMPT },
+        {
+          role: "user",
+          content:
+            "Statement: " + item.statement +
+            "\nUser Rating: " + ratings[current] +
+            "User Reasoning: " + reasonings[current],
+        },
+      ],
+    });
 
-      const { reply } = await res.json();
-      item.responseA = reply;
-      item.responseB = reply;
-  }
+    const [resX, resY] = await Promise.all([
+      fetch("/.netlify/functions/callLLMX", { method: "POST", headers: { "Content-Type": "application/json" }, body }),
+      fetch("/.netlify/functions/callLLMY", { method: "POST", headers: { "Content-Type": "application/json" }, body }),
+    ]);
+
+    const [{ reply: replyX }, { reply: replyY }] = await Promise.all([resX.json(), resY.json()]);
+
+    item.responseX = replyX;
+    item.responseY = replyY;
+  };
 
   const question_save = async () => {
+    const ratingForX = xSide === "A" ? ratingsA[current] : ratingsB[current];
+    const ratingForY = xSide === "A" ? ratingsB[current] : ratingsA[current];
+
     const form = {
       USER_ID: uid,
       PROLIFIC_ID: pid,
       statement: item.statement,
       statement_order: order,
       initial_reasoning: reasonings[current],
-      response_a :
-          {
-              llm_response: item.responseA,
-              persuasion_rating: ratingsA[current]
-          },
-      response_b :
-          {
-              llm_response: item.responseB,
-              llm_thinking_tokens: item.thinkingB,
-              persuasion_rating: ratingsB[current]
-          },
-      response_selection: preferred[current]
-    }
+      response_x: {
+        llm_response: item.responseX,
+        persuasion_rating: ratingForX,
+        side: xSide,
+      },
+      response_y: {
+        llm_response: item.responseY,
+        llm_thinking_tokens: item.thinkingY,
+        persuasion_rating: ratingForY,
+        side: ySide,
+      },
+      response_selection: preferred[current] === `Response ${xSide}` ? "Response X" : "Response Y",
+    };
+
     await fetch("/.netlify/functions/questions", {
       method: "POST",
-      body: JSON.stringify(form)
+      body: JSON.stringify(form),
     });
-  }
+  };
 
   async function handleNext() {
-    if (step === "statement") {
-      await update_item_values()
-      setStep("comparison");
-      return;
+    setLoading(true)
+    try{
+      if (step === "statement") {
+          await update_item_values();
+          const side = Math.random() < 0.5 ? "A" : "B";
+          setAssignments((prev) => ({ ...prev, [current]: side }));
+          setStep("comparison");
+          return;
+        }
+
+      if (current < LLM_DATA.length - 1) {
+        await question_save();
+        setCurrent(current + 1);
+        setOrder(order + 1);
+        setStep("statement");
+      } 
+      else {
+        await question_save();
+        onNext();
+      }
     }
-
-    if (current < LLM_DATA.length - 1) {
-      await question_save()
-      setCurrent(current + 1);
-      setOrder(order + 1)
-      setStep("statement");
-
-    } else {
-      await question_save()
-      onNext();
+    finally {
+      setLoading(false)
+      return;
     }
   }
 
@@ -484,12 +529,7 @@ function ExperimentPage({ onNext, uid, pid }) {
 
             <LikertScale
               value={ratings[current]}
-              onChange={(val) =>
-                setRatings((prev) => ({
-                  ...prev,
-                  [current]: val,
-                }))
-              }
+              onChange={(val) => setRatings((prev) => ({ ...prev, [current]: val }))}
               leftLabel={"Strongly\nDisagree"}
               midLabel={"Neither\nAgree\nnor\nDisagree"}
               rightLabel={"Strongly\nAgree"}
@@ -499,26 +539,16 @@ function ExperimentPage({ onNext, uid, pid }) {
               <label style={LABEL}>Please explain your reasoning:</label>
               <textarea
                 value={reasonings[current] || ""}
-                onChange={(e) =>
-                  setReasonings((prev) => ({
-                    ...prev,
-                    [current]: e.target.value,
-                  }))
-                }
+                onChange={(e) => setReasonings((prev) => ({ ...prev, [current]: e.target.value }))}
                 placeholder="Character Limit 400 characters"
                 maxLength={400}
-                style={{
-                  ...INPUT,
-                  minHeight: "110px",
-                  resize: "vertical",
-                  fontFamily: "inherit",
-                }}
+                style={{ ...INPUT, minHeight: "110px", resize: "vertical", fontFamily: "inherit" }}
               />
             </div>
           </div>
 
           <div style={{ marginTop: "22px", display: "flex", justifyContent: "center" }}>
-            <NextButton label="Next" onClick={handleNext} />
+            <NextButton label="Next" onClick={handleNext} disabled={loading}/>
           </div>
         </>
       )}
@@ -532,7 +562,7 @@ function ExperimentPage({ onNext, uid, pid }) {
             total={LLM_DATA.length}
           />
 
-  <div style={{
+          <div style={{
             width: "100%",
             maxWidth: "900px",
             display: "flex",
@@ -540,7 +570,6 @@ function ExperimentPage({ onNext, uid, pid }) {
             alignItems: "center",
             gap: "24px",
           }}>
-
             <div style={{ ...CARD, maxWidth: "700px", margin: 0 }}>
               <p style={{ fontWeight: "700", margin: "0 0 8px", color: "#111827" }}>
                 Original Statement:
@@ -557,16 +586,9 @@ function ExperimentPage({ onNext, uid, pid }) {
               </p>
             </div>
 
-            <div style={{
-              display: "flex",
-              gap: "18px",
-              width: "100%",
-              alignItems: "stretch",
-            }}>
+            <div style={{ display: "flex", gap: "18px", width: "100%", alignItems: "stretch" }}>
               <div style={{ ...CARD, flex: 1, maxWidth: "none", margin: 0 }}>
-                <h3 style={{ marginTop: 0, marginBottom: "12px", color: "#2563eb" }}>
-                  Response A
-                </h3>
+                <h3 style={{ marginTop: 0, marginBottom: "12px", color: "#2563eb" }}>Response A</h3>
                 <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 8px", color: "#374151" }}>
                   LLM Response:
                 </p>
@@ -580,8 +602,27 @@ function ExperimentPage({ onNext, uid, pid }) {
                   marginBottom: "18px",
                   color: "#374151",
                 }}>
-                  {item.responseA}
+                  {responseA}
                 </p>
+                {thinkingA && (
+                  <>
+                    <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 6px", color: "#111827" }}>
+                      Thinking Process:
+                    </p>
+                    <p style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: "10px",
+                      padding: "12px",
+                      fontSize: "14px",
+                      lineHeight: "1.6",
+                      marginBottom: "16px",
+                      color: "#374151",
+                    }}>
+                      {thinkingA}
+                    </p>
+                  </>
+                )}
                 <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 10px", color: "#111827" }}>
                   How persuasive is this response? (1-7)
                 </p>
@@ -594,9 +635,7 @@ function ExperimentPage({ onNext, uid, pid }) {
               </div>
 
               <div style={{ ...CARD, flex: 1, maxWidth: "none", margin: 0 }}>
-                <h3 style={{ marginTop: 0, marginBottom: "12px", color: "#16a34a" }}>
-                  Response B
-                </h3>
+                <h3 style={{ marginTop: 0, marginBottom: "12px", color: "#16a34a" }}>Response B</h3>
                 <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 8px", color: "#374151" }}>
                   LLM Response:
                 </p>
@@ -610,23 +649,28 @@ function ExperimentPage({ onNext, uid, pid }) {
                   marginBottom: "16px",
                   color: "#374151",
                 }}>
-                  {item.responseB}
+                  {responseB}
                 </p>
-                <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 6px", color: "#111827" }}>
-                  Thinking Process:
-                </p>
-                <p style={{
-                  background: "#fffbeb",
-                  border: "1px solid #fde68a",
-                  borderRadius: "10px",
-                  padding: "12px",
-                  fontSize: "14px",
-                  lineHeight: "1.6",
-                  marginBottom: "16px",
-                  color: "#374151",
-                }}>
-                  {item.thinkingB}
-                </p>
+                {thinkingB && (
+                  <>
+                    <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 6px", color: "#111827" }}>
+                      Thinking Process:
+                    </p>
+                    <p style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: "10px",
+                      padding: "12px",
+                      fontSize: "14px",
+                      lineHeight: "1.6",
+                      marginBottom: "16px",
+                      color: "#374151",
+                    }}>
+                      {thinkingB}
+                    </p>
+                  </>
+                )}
+
                 <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 10px", color: "#111827" }}>
                   How persuasive is this response? (1-7)
                 </p>
@@ -673,14 +717,12 @@ function ExperimentPage({ onNext, uid, pid }) {
               <NextButton
                 label={current === LLM_DATA.length - 1 ? "Continue to Post Survey" : "Next Question"}
                 onClick={handleNext}
+                disabled={loading}
               />
             </div>
-
           </div>
         </>
       )}
-
-      
     </div>
   );
 }
@@ -769,7 +811,7 @@ function PostSurveyPage({ onNext, uid, pid }) {
         ))}
 
         <div style={{ display: "flex", justifyContent: "center", marginTop: "8px" }}>
-          <NextButton label="Complete Survey" onClick={handleComplete} />
+          <NextButton label="Complete Survey" onClick={handleComplete}/>
         </div>
       </div>
 
@@ -844,17 +886,6 @@ function ThankYouPage({ onRestart }) {
           Your responses have been recorded. We appreciate your participation in this survey.
         </p>
 
-        <button
-          onClick={onRestart}
-          style={{
-            ...STOPSTART,
-            padding: "18px 34px",
-            fontSize: "18px",
-            borderRadius: "16px",
-          }}
-        >
-          Start New Survey
-        </button>
       </div>
     </div>
   );
