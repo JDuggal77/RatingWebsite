@@ -368,9 +368,10 @@ function PreSurveyPage({ onNext, onIdChange, onProlificIdChange }) {
     {STATES.map((o) => <option key={o} value={o}>{o}</option>)}
   </select>
 </div>
+            <p style={{textAlign: "center"}}>Do not exit the page while loading; this will reset all progress.</p>
         <div style={{ display: "flex", justifyContent: "center" }}>
           <NextButton
-            label={loading ? "Saving..." : "Start Survey"}
+            label={loading ? "Loading..." : "Start Survey"}
             onClick={handleNext(pre_survey_save, onNext)}
             disabled={loading}
           />
@@ -547,8 +548,9 @@ function ExperimentPage({ onNext, uid, pid }) {
             </div>
           </div>
 
+          <p style={{textAlign: "center"}}>Do not exit the page while loading; this will reset all progress.</p>
           <div style={{ marginTop: "22px", display: "flex", justifyContent: "center" }}>
-            <NextButton label="Next" onClick={handleNext} disabled={loading}/>
+            <NextButton label={loading ? "Loading..." : "Next"} onClick={handleNext} disabled={loading}/>
           </div>
         </>
       )}
@@ -713,9 +715,10 @@ function ExperimentPage({ onNext, uid, pid }) {
               </div>
             </div>
 
+            <p style={{textAlign: "center"}}>Do not exit the page while loading; this will reset all progress.</p>
             <div style={{ display: "flex", justifyContent: "center" }}>
               <NextButton
-                label={current === LLM_DATA.length - 1 ? "Continue to Post Survey" : "Next Question"}
+                label={loading ? "Loading..." : current === LLM_DATA.length - 1 ? "Continue to Post Survey" : "Next Question"}
                 onClick={handleNext}
                 disabled={loading}
               />
@@ -810,6 +813,7 @@ function PostSurveyPage({ onNext, uid, pid }) {
           </div>
         ))}
 
+        <p style={{textAlign: "center"}}>Do not exit the page while loading; this will reset all progress.</p>
         <div style={{ display: "flex", justifyContent: "center", marginTop: "8px" }}>
           <NextButton label="Complete Survey" onClick={handleComplete}/>
         </div>
@@ -883,7 +887,7 @@ function ThankYouPage({ onRestart }) {
             lineHeight: 1.45,
           }}
         >
-          Your responses have been recorded. We appreciate your participation in this survey.
+          Your responses have been recorded. We appreciate your participation in this survey. You may safely close this window now.
         </p>
 
       </div>
