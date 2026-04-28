@@ -241,6 +241,35 @@ function LikertScale({ value, onChange, leftLabel, midLabel, rightLabel }) {
   );
 }
 
+function PDFPage({onNext}) {
+  const [consented, setConsented] = useState(false)
+
+  return (
+    <div style={PAGE}>
+      <div style={{ textAlign: "center", marginBottom: "24px", maxWidth: "700px" }}>
+        <h3 style={{ color: "#000" }}>
+          Please review the document below.
+        </h3>
+      </div>
+
+      <object data="sample_pdf.pdf" type="application/pdf" width="70%" height="500px">
+        <p>Unable to display PDF file. <a href="sample_pdf.pdf">Download</a> instead.</p>
+      </object>
+    <br></br>
+
+    <div>
+      <input type="checkbox" id="consent" style={{width: "1.2rem", height:"1.2rem"}} name="consent" value="Consent" onChange={(e) => setConsented(e.target.checked)}></input>
+      <label for="consent" style={{fontSize: "1.3rem"}}>I agree to the terms outlined in the document.</label>
+    </div>
+    <br></br>
+
+    <NextButton label="Next" onClick={onNext} disabled={!consented}/>
+
+
+    </div>
+  )
+}
+
 function PreSurveyPage({ onNext, onIdChange, onProlificIdChange }) {
   const [loading, setLoading] = useState(false);
 
@@ -903,10 +932,11 @@ export default function App() {
 
   return (
     <>
-      {page === 0 && <PreSurveyPage onNext={() => setPage(1)} onIdChange={setId} onProlificIdChange={setProlificID} />}
-      {page === 1 && <ExperimentPage onNext={() => setPage(2)} uid={id} pid={prolificID}/>}
-      {page === 2 && <PostSurveyPage onNext={() => setPage(3)} uid={id} pid={prolificID}/>}
-      {page === 3 && <ThankYouPage onRestart={() => setPage(0)} uid={""} pid={""}/>}
+      {page === 0 && <PDFPage onNext={() => setPage(1)}/>}
+      {page === 1 && <PreSurveyPage onNext={() => setPage(2)} onIdChange={setId} onProlificIdChange={setProlificID} />}
+      {page === 2 && <ExperimentPage onNext={() => setPage(3)} uid={id} pid={prolificID}/>}
+      {page === 3 && <PostSurveyPage onNext={() => setPage(4)} uid={id} pid={prolificID}/>}
+      {page === 4 && <ThankYouPage onRestart={() => setPage(0)} uid={""} pid={""}/>}
     </>
   );
 }
