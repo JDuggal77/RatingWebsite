@@ -635,13 +635,13 @@ function ExperimentPage({ onNext, uid, pid }) {
               </div>
 
               <div style={{ ...CARD, flex: 1, maxWidth: "none", margin: 0 }}>
-                <h3 style={{ marginTop: 0, marginBottom: "12px", color: "#16a34a" }}>Response B</h3>
+                <h3 style={{ marginTop: 0, marginBottom: "12px", color: "#2563eb" }}>Response B</h3>
                 <p style={{ fontSize: "13px", fontWeight: "700", margin: "0 0 8px", color: "#374151" }}>
                   LLM Response:
                 </p>
                 <p style={{
-                  background: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
+                  background: "#eff6ff",
+                  border: "1px solid #bfbdfe",
                   borderRadius: "10px",
                   padding: "12px",
                   fontSize: "14px",
@@ -698,9 +698,9 @@ function ExperimentPage({ onNext, uid, pid }) {
                       style={{
                         padding: "14px 32px",
                         borderRadius: "12px",
-                        border: `2px solid ${isChosen ? (isA ? "#2563eb" : "#16a34a") : "#d1d5db"}`,
-                        background: isChosen ? (isA ? "#eff6ff" : "#f0fdf4") : "#fff",
-                        color: isA ? "#2563eb" : "#16a34a",
+                        border: `2px solid ${isChosen ? "#2563eb" : "#d1d5db"}`,
+                        background: isChosen ? "#eff6ff" : "#fff",
+                        color: "#2563eb",
                         fontSize: "16px",
                         fontWeight: "700",
                         cursor: "pointer",
